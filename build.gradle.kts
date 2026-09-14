@@ -489,12 +489,21 @@ val runTransportNativeTests by tasks.registering(Exec::class) {
     commandLine("ctest", "--test-dir", "build/native-probe/libdatachannel", "--output-on-failure", "-R", "transport.teardown|mux.pending|mux.authentication|ice.attribute.limits|stun.udp.mux")
 }
 tasks.register<JavaExec>("nativeTransportProbe") {
-    dependsOn(runTransportNativeTests, probeIdentity, probeEncryptedIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCallbackCleanupProbe", "nativeLoggingProbe", "nativeStunMonitorProbe")
+    dependsOn(runTransportNativeTests, probeIdentity, probeEncryptedIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCallbackCleanupProbe", "nativeLoggingProbe", "nativeStunMonitorProbe", "nativeDiagnosticProbe")
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
     classpath = probeSourceSet.runtimeClasspath
     mainClass = "tel.schich.libdatachannel.NativeTransportProbe"
     systemProperty("libdatachannel.native.datachannel-java.path", layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath)
     args("build/probe-identity/cert.pem", "build/probe-identity/key.pem", "build/probe-identity/key-encrypted.pem")
+}
+
+tasks.register<JavaExec>("nativeDiagnosticProbe") {
+    dependsOn(compileNativeProbe, probeIdentity, tasks.named(probeSourceSet.classesTaskName))
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = probeSourceSet.runtimeClasspath
+    mainClass = "tel.schich.libdatachannel.NativeDiagnosticProbe"
+    systemProperty("libdatachannel.native.datachannel-java.path", layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath)
+    args("build/probe-identity/cert.pem", "build/probe-identity/key.pem")
 }
 
 tasks.register<JavaExec>("nativeCallbackCleanupProbe") {

@@ -159,4 +159,14 @@ owned snapshots and increasing ages, error handling, listener/monitor ownership,
 concurrent reads and close, and absence of peer construction. These local fixtures
 are not evidence of public NAT traversal or gameplay.
 
+`:nativeDiagnosticProbe` is also included in `:nativeTransportProbe`. Its test-owned
+incoming admission connects real ICE, DTLS and SCTP over IPv4 and IPv6 loopback. Two
+named channels negotiate ordered reliable delivery and unordered unreliable delivery
+with zero retransmissions; both ends read back their actual native reliability settings.
+Each end generates a separate random challenge on each channel and verifies its exact
+binary reply. Both local and remote certificate mismatch cases must fail before any
+channel opens. The probe verifies selected local/remote addresses and complete teardown.
+These are native transport feasibility tests. They do not implement a signed provider
+diagnostic principal, public first-contact validation, game session creation or login.
+
 Detailed [contributor and source attribution](../docs/contribution-provenance.md) is retained separately.

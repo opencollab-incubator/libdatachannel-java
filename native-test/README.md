@@ -5,7 +5,7 @@ git submodule update --init --recursive
 ./gradlew :nativeTransportProbe --no-daemon --max-workers=2 -Plibdatachannel.java-compiler-version=17
 ```
 
-The focused Linux x86_64 build uses JDK 17, CMake, a C/C++ compiler, system OpenSSL
+The focused Linux x86_64 build uses JDK 17, Python 3, CMake, a C/C++ compiler, system OpenSSL
 development files and the `openssl` CLI. Library bytecode remains compatible with
 Java 11. The normal dockcross build remains available for portable artifacts.
 The Java probes reserve loopback UDP ports 49184 and 49195. Native mux tests also
@@ -177,5 +177,10 @@ pairs constructed by callers have no candidate metadata. Native reads size both 
 strings dynamically, cap each at 64 KiB including NUL, and retry at most three times
 if the pair grows between sizing and copying. `:nativeCandidatePairBufferProbe` checks
 growth and oversize handling separately from the IPv4/IPv6 live selected-pair checks.
+
+The [isolated diagnostic roles](diagnostic-role.md) extend this fixture to separate
+processes with private test configuration and offer/answer files. They support only
+test-owned first-contact admission; external service authorization and native UDP
+budgets remain separate requirements.
 
 Detailed [contributor and source attribution](../docs/contribution-provenance.md) is retained separately.

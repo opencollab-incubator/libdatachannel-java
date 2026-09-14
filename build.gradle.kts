@@ -489,7 +489,7 @@ val runTransportNativeTests by tasks.registering(Exec::class) {
     commandLine("ctest", "--test-dir", "build/native-probe/libdatachannel", "--output-on-failure", "-R", "transport.teardown|mux.pending|mux.authentication|ice.attribute.limits|stun.udp.mux")
 }
 tasks.register<JavaExec>("nativeTransportProbe") {
-    dependsOn(runTransportNativeTests, probeIdentity, probeEncryptedIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCallbackCleanupProbe", "nativeLoggingProbe", "nativeStunMonitorProbe", "nativeDiagnosticProbe")
+    dependsOn(runTransportNativeTests, probeIdentity, probeEncryptedIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCallbackCleanupProbe", "nativeLoggingProbe", "nativeStunMonitorProbe", "nativeDiagnosticProbe", "nativeDiagnosticRoleConfigProbe")
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
     classpath = probeSourceSet.runtimeClasspath
     mainClass = "tel.schich.libdatachannel.NativeTransportProbe"
@@ -509,6 +509,24 @@ tasks.register<JavaExec>("nativeDiagnosticProbe") {
 tasks.register<Exec>("nativeCandidatePairBufferProbe") {
     dependsOn(compileNativeProbe)
     commandLine(layout.buildDirectory.file("native-probe/candidate-pair-buffer-test").get().asFile.absolutePath)
+}
+
+tasks.register("writeNativeDiagnosticLaunch") {
+    dependsOn(compileNativeProbe, tasks.named(probeSourceSet.classesTaskName))
+    doLast {
+        val launcher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }.get()
+        val values = listOf(launcher.executablePath.asFile.absolutePath,
+            "-XX:-UsePerfData",
+            "-Dlibdatachannel.native.datachannel-java.path=${layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath}",
+            "-cp", probeSourceSet.runtimeClasspath.asPath, "tel.schich.libdatachannel.NativeDiagnosticRole")
+        layout.buildDirectory.file("native-diagnostic-argv.txt").get().asFile.writeText(values.joinToString("\n", postfix = "\n"))
+    }
+}
+
+tasks.register<Exec>("nativeDiagnosticRoleConfigProbe") {
+    dependsOn("writeNativeDiagnosticLaunch")
+    commandLine("python3", project.file("native-test/diagnostic_role_config.py").absolutePath,
+        layout.buildDirectory.file("native-diagnostic-argv.txt").get().asFile.absolutePath)
 }
 
 tasks.register<JavaExec>("nativeCallbackCleanupProbe") {

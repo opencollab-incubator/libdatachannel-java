@@ -58,6 +58,7 @@ public final class NativeDiagnosticProbe {
                         AtomicInteger opened, AtomicReference<Throwable> failure) {
         byte[] challenge = new byte[32]; RANDOM.nextBytes(challenge);
         AtomicBoolean started = new AtomicBoolean(), completed = new AtomicBoolean();
+        AtomicInteger receivedFrames = new AtomicInteger();
         Runnable start = () -> {
             if (!started.compareAndSet(false, true)) return;
             try {
@@ -72,6 +73,7 @@ public final class NativeDiagnosticProbe {
         };
         channel.onMessage.register(DataChannelCallback.Message.handleBinary((dc, data) -> {
             try {
+                check(receivedFrames.incrementAndGet() <= 2, "bounded one challenge and one reply per channel");
                 check(data.remaining() == FRAME_SIZE && data.getInt() == MAGIC && data.get() == index, "bounded channel-specific challenge frame");
                 int kind = data.get(); byte[] nonce = new byte[32]; data.get(nonce);
                 if (kind == 1) send(dc, index, 2, nonce);

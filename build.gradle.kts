@@ -451,11 +451,12 @@ val configureNativeProbe by tasks.registering(Exec::class) {
         "-DLIBDATACHANNEL_SOURCE_DIR=${project.file("jni/libdatachannel").absolutePath}", "-DUSE_SYSTEM_JUICE=OFF",
         "-DCMAKE_BUILD_TYPE=Debug", "-DPROJECT_VERSION=${project.version}", "-DENABLE_LOCALHOST_ADDRESS=ON",
         "-DTRANSPORT_TEARDOWN_TESTS=ON", "-DPENDING_MUX_TESTS=ON", "-DICE_UDP_MUX_TESTS=ON",
+        "-DSTUN_UDP_MUX_TESTS=ON",
         "-DRTC_ENABLE_TEST_DIAGNOSTICS=ON")
 }
 val compileNativeProbe by tasks.registering(Exec::class) {
     dependsOn(configureNativeProbe)
-    commandLine("cmake", "--build", "build/native-probe", "--target", "datachannel-java", "transport-teardown-test", "ice-udp-mux-pending-test", "mux-pending-test", "mux-pending-lifetime-test", "mux-authentication-test", "ice-attribute-limits-test", "-j2")
+    commandLine("cmake", "--build", "build/native-probe", "--target", "datachannel-java", "transport-teardown-test", "ice-udp-mux-pending-test", "stun-udp-mux-monitor-test", "mux-pending-test", "mux-pending-lifetime-test", "mux-authentication-test", "ice-attribute-limits-test", "-j2")
 }
 val probeSourceSet = sourceSets.create("nativeProbe") {
     java.srcDir("native-test")
@@ -485,10 +486,10 @@ val probeEncryptedIdentity by tasks.registering(Exec::class) {
 }
 val runTransportNativeTests by tasks.registering(Exec::class) {
     dependsOn(compileNativeProbe)
-    commandLine("ctest", "--test-dir", "build/native-probe/libdatachannel", "--output-on-failure", "-R", "transport.teardown|mux.pending|mux.authentication|ice.attribute.limits")
+    commandLine("ctest", "--test-dir", "build/native-probe/libdatachannel", "--output-on-failure", "-R", "transport.teardown|mux.pending|mux.authentication|ice.attribute.limits|stun.udp.mux")
 }
 tasks.register<JavaExec>("nativeTransportProbe") {
-    dependsOn(runTransportNativeTests, probeIdentity, probeEncryptedIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCallbackCleanupProbe", "nativeLoggingProbe")
+    dependsOn(runTransportNativeTests, probeIdentity, probeEncryptedIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCallbackCleanupProbe", "nativeLoggingProbe", "nativeStunMonitorProbe")
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
     classpath = probeSourceSet.runtimeClasspath
     mainClass = "tel.schich.libdatachannel.NativeTransportProbe"
@@ -509,5 +510,13 @@ tasks.register<JavaExec>("nativeLoggingProbe") {
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
     classpath = probeSourceSet.runtimeClasspath
     mainClass = "tel.schich.libdatachannel.NativeLoggingProbe"
+    systemProperty("libdatachannel.native.datachannel-java.path", layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath)
+}
+
+tasks.register<JavaExec>("nativeStunMonitorProbe") {
+    dependsOn(compileNativeProbe, tasks.named(probeSourceSet.classesTaskName))
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = probeSourceSet.runtimeClasspath
+    mainClass = "tel.schich.libdatachannel.NativeStunMonitorProbe"
     systemProperty("libdatachannel.native.datachannel-java.path", layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath)
 }

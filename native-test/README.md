@@ -125,4 +125,38 @@ The probe suite additionally covers stalled application executors, same-peer tup
 attachment, forged attachment, reentrant listener close, scoped C++ preparation and
 asynchronous destruction completion.
 
+## Persistent STUN observations
+
+`IceUdpMuxListener.monitorStun(serverHost, serverPort)` creates an independently owned
+`StunUdpMuxMonitor` on the listener's exact UDP binding. It keeps native STUN refreshes
+running with no player or remote ICE description. Close each monitor explicitly;
+closing the listener leaves an already-created monitor alive, and closing a monitor
+leaves other owners of the shared socket alive. The standalone constructor requires
+the same bind address spelling and fixed port as an existing mux owner.
+
+`binding(index)` copies one resolved server's observation atomically into an immutable
+`StunBinding`. An empty result means that index is unavailable, including while DNS
+is unresolved. Missing success age means no valid response has been observed. Later
+failure retains the historical mapping and its increasing age. Reading a snapshot
+does not renew it: even a retained Java snapshot continues ageing using `nanoTime`.
+The successful-response counter increases for each accepted response; mapping revision
+increases only when the observed address or port changes. Counters restart for a new
+monitor, so applications must track monitor replacement separately. A successful STUN
+observation describes a mapping, not arbitrary-source reachability or successful ICE.
+
+Native DNS resolves once per monitor and does not guarantee both address families in
+its bounded results. Applications needing explicit dual-family coverage should select
+numeric IPv4 and IPv6 server addresses and own one monitor per selection. DNS retry,
+rotation, eligibility, expiry and reachability policy belong to the application. Each
+native refresh runs independently of application polling or control-plane heartbeats.
+The Java age clock, like the native clock on some platforms, can exclude system sleep;
+applications must requalify observations after suspend/resume.
+
+`:nativeStunMonitorProbe` is included in `:nativeTransportProbe`. It runs real JNI and
+native code against local IPv4 and IPv6 UDP responders with the production refresh
+interval. It checks shared socket identity, unchanged and remapped observations,
+owned snapshots and increasing ages, error handling, listener/monitor ownership,
+concurrent reads and close, and absence of peer construction. These local fixtures
+are not evidence of public NAT traversal or gameplay.
+
 Detailed [contributor and source attribution](../docs/contribution-provenance.md) is retained separately.

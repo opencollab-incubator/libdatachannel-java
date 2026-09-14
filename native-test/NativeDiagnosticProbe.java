@@ -147,6 +147,10 @@ public final class NativeDiagnosticProbe {
                 check(admissions.get() == 1 && listener.statistics().agents() == 1, "one admission and one transport peer");
                 check(client.remoteAddress().getPort() == port, "actual selected mux port");
                 check(InetAddress.getByName(host.localAddress().getHostString()).equals(bind), "actual selected local address family");
+                CandidatePair pair = client.selectedCandidatePair();
+                check(pair.remote().getPort() == port && InetAddress.getByName(pair.remote().getHostString()).equals(bind), "selected candidate SDP endpoint parsed");
+                check(pair.localCandidate().orElseThrow().transport() == IceCandidate.Transport.UDP &&
+                    pair.remoteCandidate().orElseThrow().type() == IceCandidate.Type.HOST, "actual selected UDP candidate type retained");
             } else {
                 check(failed.await(10, TimeUnit.SECONDS), "incorrect pinned " + invalidIdentity + " identity must fail DTLS");
                 check(opened.get() == 0 && roundTrips.getCount() == 4, "no diagnostic data before identity verification");

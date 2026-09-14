@@ -456,7 +456,7 @@ val configureNativeProbe by tasks.registering(Exec::class) {
 }
 val compileNativeProbe by tasks.registering(Exec::class) {
     dependsOn(configureNativeProbe)
-    commandLine("cmake", "--build", "build/native-probe", "--target", "datachannel-java", "transport-teardown-test", "ice-udp-mux-pending-test", "stun-udp-mux-monitor-test", "mux-pending-test", "mux-pending-lifetime-test", "mux-authentication-test", "ice-attribute-limits-test", "-j2")
+    commandLine("cmake", "--build", "build/native-probe", "--target", "datachannel-java", "transport-teardown-test", "ice-udp-mux-pending-test", "stun-udp-mux-monitor-test", "candidate-pair-buffer-test", "mux-pending-test", "mux-pending-lifetime-test", "mux-authentication-test", "ice-attribute-limits-test", "-j2")
 }
 val probeSourceSet = sourceSets.create("nativeProbe") {
     java.srcDir("native-test")
@@ -498,12 +498,17 @@ tasks.register<JavaExec>("nativeTransportProbe") {
 }
 
 tasks.register<JavaExec>("nativeDiagnosticProbe") {
-    dependsOn(compileNativeProbe, probeIdentity, tasks.named(probeSourceSet.classesTaskName))
+    dependsOn(compileNativeProbe, probeIdentity, tasks.named(probeSourceSet.classesTaskName), "nativeCandidatePairBufferProbe")
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
     classpath = probeSourceSet.runtimeClasspath
     mainClass = "tel.schich.libdatachannel.NativeDiagnosticProbe"
     systemProperty("libdatachannel.native.datachannel-java.path", layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath)
     args("build/probe-identity/cert.pem", "build/probe-identity/key.pem")
+}
+
+tasks.register<Exec>("nativeCandidatePairBufferProbe") {
+    dependsOn(compileNativeProbe)
+    commandLine(layout.buildDirectory.file("native-probe/candidate-pair-buffer-test").get().asFile.absolutePath)
 }
 
 tasks.register<JavaExec>("nativeCallbackCleanupProbe") {

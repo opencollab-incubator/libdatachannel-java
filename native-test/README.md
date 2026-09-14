@@ -169,4 +169,13 @@ channel opens. The probe verifies selected local/remote addresses and complete t
 These are native transport feasibility tests. They do not implement a signed provider
 diagnostic principal, public first-contact validation, game session creation or login.
 
+`PeerConnection.selectedCandidatePair()` reads the actual selected native pair. Its
+existing address getters remain available; `localCandidate()` and `remoteCandidate()`
+also expose immutable `IceCandidate` metadata, including candidate type, transport,
+priority and the original SDP/extension tail. Parsing performs no DNS. Address-only
+pairs constructed by callers have no candidate metadata. Native reads size both SDP
+strings dynamically, cap each at 64 KiB including NUL, and retry at most three times
+if the pair grows between sizing and copying. `:nativeCandidatePairBufferProbe` checks
+growth and oversize handling separately from the IPv4/IPv6 live selected-pair checks.
+
 Detailed [contributor and source attribution](../docs/contribution-provenance.md) is retained separately.

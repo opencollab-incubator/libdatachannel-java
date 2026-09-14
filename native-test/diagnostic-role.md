@@ -1,4 +1,4 @@
-# Isolated first-contact diagnostic roles
+# Isolated diagnostic roles
 
 These Linux test executables exchange real ICE, DTLS and SCTP traffic between separate
 processes. Admission belongs to the test: it does not implement a signed provider
@@ -27,7 +27,7 @@ without overwriting an existing attempt's file. Use a new private directory per 
 
 | Keys | Meaning |
 | --- | --- |
-| `version`, `mode` | Exactly `1` and `first-contact`; assisted mode is not implemented. |
+| `version`, `mode` | Version `1`; mode `first-contact` or `assisted`. |
 | `role` | `host` or `client`. |
 | `bindAddress`, `localPort` | Numeric family-specific socket binding and fixed port. |
 | `publicAddress`, `publicPort` | Exact numeric candidate advertised for this process. |
@@ -50,6 +50,23 @@ private offer metadata does not send connectivity checks. The test must independ
 establish the claimed source tuple; a STUN mapping toward another destination is not
 proof that a NAT will use the same tuple toward this host.
 
+In `assisted` mode the host validates the private offer, creates one peer on the same
+listener mux, installs the authorized remote SDP and starts gathering before publishing
+the generated answer with the explicit candidate. It emits `cooperation_started` at
+that boundary. It does not wait for ICE success before returning the answer. The mux's
+pending admission gate still applies to the known peer's first client request: the
+handler must return `Acceptance.reuse(preparedPeer)` after exact source and ICE username
+checks. Native code verifies the request integrity and attaches the source to that same
+peer. Rejecting every pending callback breaks bidirectional ICE even if the host's own
+outbound checks succeed. No additional transport or gameplay peer is created for reuse.
+
+Run first-contact and assisted cases in separate fresh network namespaces/contact tables.
+A later packet from a source the host already contacted is not pristine first-contact
+evidence. A constructed source-dependent filter can block first-contact while allowing
+the explicit assisted exchange. The client must still have a candidate the host can
+actually reach; this test does not discover a NATed stock client's unknown public port,
+prove arbitrary NAT combinations, or replace the stock-client compatibility gate.
+
 Both roles must be foreground commands in a lab launcher that waits for both to exit.
 A readiness marker on the client lets the launcher start the host after the offer is
 available. Two channels have distinct exact names and actual negotiated settings:
@@ -69,6 +86,13 @@ and selected-candidate fields are observations, not offered-candidate inference.
 
 Logs contain bounded result events, not ICE passwords, SDP, key paths or fingerprints.
 The config validator covers malformed keys, duplicates, expired/excessive lifetimes,
-hostnames, ports, unsupported modes, escapes, permissions and oversized input. The
+hostnames, mixed address families, ports, unsupported modes, escapes, permissions and oversized input. The
 existing native diagnostic regression additionally tests both certificate-mismatch
 directions and requires zero opened channels in those cases.
+
+Failure output records whether ICE had connected, opened-channel count, the last host
+agent/notification snapshot and confirmed transport destruction. The snapshot can precede
+cleanup; it is not a live count after destruction. Intentional failure cases must declare
+the expected nonzero exit in the lab coordinator and retain both reports. A completed
+negative experiment does not mean transport succeeded. After a first-contact cancellation,
+the host also settles any in-flight admission completion and closes a late accepted peer.

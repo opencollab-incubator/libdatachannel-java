@@ -22,13 +22,16 @@ with tempfile.TemporaryDirectory(prefix="diagnostic-config-") as directory:
         "remoteFingerprint": ":".join(["AB"] * 32), "offerPath": str(root / "offer.sdp"), "answerPath": str(root / "answer.sdp")}
     def render(value):
         return "".join(k + "=" + v + "\n" for k, v in value.items())
-    cases = [("valid", render(config), 0o600, True)]
+    cases = [("valid", render(config), 0o600, True),
+             ("assisted", render({**config, "mode": "assisted"}), 0o600, True),
+             ("ipv6", render({**config, "bindAddress": "::1", "peerAddress": "::1", "publicAddress": "::1"}), 0o600, True)]
     for name, changed in [
         ("expired", {"expiresAtMillis": "1"}),
         ("excessive-duration", {"maxDurationMillis": "120001"}),
         ("hostname", {"peerAddress": "example.invalid"}),
         ("port", {"localPort": "65536"}),
-        ("unsupported-mode", {"mode": "assisted"}),
+        ("unsupported-mode", {"mode": "unknown"}),
+        ("wrong-family", {"peerAddress": "::1"}),
         ("secret-escape", {"localPassword": "\\u0061" * 32}),
         ("relative-path", {"keyPath": "key.pem"})]:
         cases.append((name, render({**config, **changed}), 0o600, False))

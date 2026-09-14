@@ -179,8 +179,8 @@ if the pair grows between sizing and copying. `:nativeCandidatePairBufferProbe` 
 growth and oversize handling separately from the IPv4/IPv6 live selected-pair checks.
 
 The [isolated diagnostic roles](diagnostic-role.md) extend this fixture to separate
-processes with private test configuration and offer/answer files. They support only
-test-owned first-contact admission; external service authorization and native UDP
-budgets remain separate requirements.
+processes with private test configuration and offer/answer files. They exercise test-owned
+first-contact and assisted known-peer admission on the shared mux; external service
+authorization and native UDP budgets remain separate requirements.
 
 Detailed [contributor and source attribution](../docs/contribution-provenance.md) is retained separately.

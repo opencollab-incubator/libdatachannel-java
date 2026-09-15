@@ -62,6 +62,7 @@ add_library(datachannel-java SHARED
         src/native_peer.cpp
         src/native_mux.cpp
         src/native_stun_monitor.cpp
+        src/native_udp_limits.cpp
         src/native_track.cpp
         src/callback.cpp)
 target_link_libraries(datachannel-java PRIVATE datachannel-static)

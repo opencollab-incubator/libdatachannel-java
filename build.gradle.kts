@@ -506,6 +506,15 @@ tasks.register<JavaExec>("nativeDiagnosticProbe") {
     args("build/probe-identity/cert.pem", "build/probe-identity/key.pem")
 }
 
+tasks.register<JavaExec>("nativeUdpSendLimitsProbe") {
+    dependsOn(compileNativeProbe, probeIdentity, tasks.named(probeSourceSet.classesTaskName))
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = probeSourceSet.runtimeClasspath
+    mainClass = "tel.schich.libdatachannel.NativeUdpSendLimitsProbe"
+    systemProperty("libdatachannel.native.datachannel-java.path", layout.buildDirectory.file("native-probe/libdatachannel-java.so").get().asFile.absolutePath)
+    args("build/probe-identity/cert.pem", "build/probe-identity/key.pem")
+}
+
 tasks.register<Exec>("nativeCandidatePairBufferProbe") {
     dependsOn(compileNativeProbe)
     commandLine(layout.buildDirectory.file("native-probe/candidate-pair-buffer-test").get().asFile.absolutePath)

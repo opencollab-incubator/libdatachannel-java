@@ -59,14 +59,11 @@ import java.util.concurrent.TimeoutException;
 
 public class PeerConnection implements Closeable {
     private static final Logger LOGGER = LoggerFactory.getLogger(PeerConnection.class);
-    static final Executor DIRECT_EXECUTOR = Runnable::run;
 
     final int peerHandle;
-    private final Executor executor;
+    final CallbackDispatcher callbacks;
     private final ConcurrentMap<Integer, DataChannel> channels;
     private final ConcurrentMap<Integer, Track> tracks;
-    private final Object resourceLock = new Object();
-    private volatile boolean closing;
     private final Cleaner.Cleanable cleanable;
     private volatile boolean nativeTeardownComplete;
     private @Nullable CompletableFuture<Void> closeCompletion;
@@ -83,21 +80,21 @@ public class PeerConnection implements Closeable {
     public final EventListenerContainer<PeerConnectionCallback.DataChannel> onDataChannel;
     public final EventListenerContainer<PeerConnectionCallback.Track> onTrack;
 
-    private PeerConnection(int peerHandle, final Executor executor) {
+    private PeerConnection(int peerHandle, CallbackDispatcher callbacks) {
         this.peerHandle = peerHandle;
-        this.executor = executor;
+        this.callbacks = callbacks;
         this.channels = new ConcurrentHashMap<>();
         this.tracks = new ConcurrentHashMap<>();
         this.listener = new PeerConnectionListener(this);
 
-        this.onLocalDescription = new EventListenerContainer<>("LocalDescription", set -> rtcSetLocalDescriptionCallback(peerHandle, set), executor);
-        this.onLocalCandidate = new EventListenerContainer<>("LocalCandidate", set -> rtcSetLocalCandidateCallback(peerHandle, set), executor);
-        this.onStateChange = new EventListenerContainer<>("StateChange", set -> rtcSetStateChangeCallback(peerHandle, set), executor);
-        this.onIceStateChange = new EventListenerContainer<>("IceStateChange", set -> rtcSetIceStateChangeCallback(peerHandle, set), executor);
-        this.onGatheringStateChange = new EventListenerContainer<>("GatheringStateChange", set -> rtcSetGatheringStateChangeCallback(peerHandle, set), executor);
-        this.onSignalingStateChange = new EventListenerContainer<>("SignalingStateChange", set -> rtcSetSignalingStateChangeCallback(peerHandle, set), executor);
-        this.onDataChannel = new EventListenerContainer<>("DataChannel", set -> rtcSetDataChannelCallback(peerHandle, set), executor);
-        this.onTrack = new EventListenerContainer<>("Track", set -> rtcSetTrackCallback(peerHandle, set), executor);
+        this.onLocalDescription = new EventListenerContainer<>("LocalDescription", set -> rtcSetLocalDescriptionCallback(peerHandle, set), callbacks);
+        this.onLocalCandidate = new EventListenerContainer<>("LocalCandidate", set -> rtcSetLocalCandidateCallback(peerHandle, set), callbacks);
+        this.onStateChange = new EventListenerContainer<>("StateChange", set -> rtcSetStateChangeCallback(peerHandle, set), callbacks);
+        this.onIceStateChange = new EventListenerContainer<>("IceStateChange", set -> rtcSetIceStateChangeCallback(peerHandle, set), callbacks);
+        this.onGatheringStateChange = new EventListenerContainer<>("GatheringStateChange", set -> rtcSetGatheringStateChangeCallback(peerHandle, set), callbacks);
+        this.onSignalingStateChange = new EventListenerContainer<>("SignalingStateChange", set -> rtcSetSignalingStateChangeCallback(peerHandle, set), callbacks);
+        this.onDataChannel = new EventListenerContainer<>("DataChannel", set -> rtcSetDataChannelCallback(peerHandle, set), callbacks);
+        this.onTrack = new EventListenerContainer<>("Track", set -> rtcSetTrackCallback(peerHandle, set), callbacks);
 
         this.cleanable = LibDataChannel.CLEANER.register(this, () -> {
             // make sure not to capture this here, that would be a memory leak
@@ -107,8 +104,8 @@ public class PeerConnection implements Closeable {
         });
     }
 
-    static PeerConnection fromNative(int handle, Executor executor) {
-        PeerConnection peer = new PeerConnection(handle, executor);
+    static PeerConnection fromNative(int handle, CallbackDispatcher callbacks) {
+        PeerConnection peer = new PeerConnection(handle, callbacks);
         peer.preparationOwned = true;
         return peer;
     }
@@ -169,6 +166,12 @@ public class PeerConnection implements Closeable {
     public static PeerConnection createPeer(PeerConnectionConfiguration config, Executor executor,
                                            @Nullable Path certificate, @Nullable Path key,
                                            @Nullable String keyPassword) {
+        return createPeer(config, CallbackDispatcher.on(executor), certificate, key, keyPassword);
+    }
+
+    private static PeerConnection createPeer(PeerConnectionConfiguration config, CallbackDispatcher callbacks,
+                                            @Nullable Path certificate, @Nullable Path key,
+                                            @Nullable String keyPassword) {
         if ((certificate == null) != (key == null)) throw new IllegalArgumentException("Certificate/key must be paired");
         if (keyPassword != null && key == null) throw new IllegalArgumentException("A key password requires an identity");
         String proxyServer = null;
@@ -196,7 +199,7 @@ public class PeerConnection implements Closeable {
                 certificate == null ? null : certificate.toString(),
                 key == null ? null : key.toString(), keyPassword);
 
-        final PeerConnection peer = new PeerConnection(wrapError("rtcCreatePeerConnection", result), executor);
+        final PeerConnection peer = new PeerConnection(wrapError("rtcCreatePeerConnection", result), callbacks);
         setupPeerConnectionListener(peer.peerHandle, peer.listener);
 
         return peer;
@@ -206,15 +209,7 @@ public class PeerConnection implements Closeable {
     public static long nativeCreationAttempts() { return LibDataChannelNative.rtcGetPeerConnectionCreationAttempts(); }
 
     public static PeerConnection createPeer(PeerConnectionConfiguration config) {
-        return createPeer(config, DIRECT_EXECUTOR);
-    }
-
-    boolean usesDirectCallbacks() {
-        return executor == DIRECT_EXECUTOR;
-    }
-
-    boolean isClosing() {
-        return closing;
+        return createPeer(config, CallbackDispatcher.direct(), null, null, null);
     }
 
     @Nullable
@@ -223,13 +218,7 @@ public class PeerConnection implements Closeable {
     }
 
     DataChannel newChannel(int channelHandle) {
-        DataChannel channel;
-        synchronized (resourceLock) {
-            channel = channels.computeIfAbsent(channelHandle, h -> new DataChannel(this, h, executor));
-        }
-        // A native callback or a creator can publish a handle after close took its snapshot.
-        if (closing) channel.close();
-        return channel;
+        return channels.computeIfAbsent(channelHandle, h -> new DataChannel(this, h, callbacks));
     }
 
     void dropChannelState(int channelHandle) {
@@ -237,12 +226,7 @@ public class PeerConnection implements Closeable {
     }
 
     Track newTrack(int trackHandle) {
-        Track track;
-        synchronized (resourceLock) {
-            track = tracks.computeIfAbsent(trackHandle, h -> new Track(this, h));
-        }
-        if (closing) track.close();
-        return track;
+        return tracks.computeIfAbsent(trackHandle, h -> new Track(this, h));
     }
 
     public void dropTrackState(int trackHandle) {
@@ -256,20 +240,16 @@ public class PeerConnection implements Closeable {
      */
     @Override
     public void close() {
-        synchronized (resourceLock) {
-            closing = true;
-        }
+        // Native unregistration waits for in-flight arrivals before we drain their handles.
+        onDataChannel.close();
+        onTrack.close();
         try {
             closeChannels();
         } catch (Exception e) {
             LOGGER.warn("Failed to close channels of peer connection", e);
         }
         for (Track track : new ArrayList<>(tracks.values())) {
-            try {
-                track.close();
-            } catch (Exception e) {
-                LOGGER.warn("Failed to close track of peer connection", e);
-            }
+            track.close();
         }
         // Detach callbacks before the cleaner deletes their native peer handle.
         onLocalDescription.close();
@@ -278,8 +258,6 @@ public class PeerConnection implements Closeable {
         onIceStateChange.close();
         onGatheringStateChange.close();
         onSignalingStateChange.close();
-        onDataChannel.close();
-        onTrack.close();
         boolean deferDeletion;
         synchronized (preparationLock) {
             deferDeletion = preparationOwned;

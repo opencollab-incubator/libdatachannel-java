@@ -1,13 +1,18 @@
 package tel.schich.libdatachannel;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import tel.schich.libdatachannel.exception.InvalidException;
 
-import java.lang.reflect.Field;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static tel.schich.libdatachannel.LibDataChannelNative.*;
 
+@Timeout(15)
 class TrackLifecycleTest {
     private static final PeerConnectionConfiguration CONFIG =
             PeerConnectionConfiguration.DEFAULT.withDisableAutoNegotiation(true);
@@ -15,45 +20,93 @@ class TrackLifecycleTest {
             + "a=mid:audio\r\na=sendonly\r\na=rtpmap:111 opus/48000/2\r\n";
 
     @Test
-    void peerCloseDeletesLocallyAddedSdpTrack() throws Exception {
-        assertPeerDeletesTrack(false);
+    void peerCloseDeletesLocallyAddedSdpTrack() {
+        try (PeerConnection peer = PeerConnection.createPeer(CONFIG);
+             Track track = peer.addTrack(SDP)) {
+            assertEquals(Track.Direction.RTC_DIRECTION_SENDONLY, track.direction());
+            peer.close();
+            assertThrows(InvalidException.class, track::direction);
+        }
     }
 
     @Test
-    void peerCloseDeletesLocallyAddedConfiguredTrack() throws Exception {
-        assertPeerDeletesTrack(true);
-    }
-
-    private static void assertPeerDeletesTrack(boolean configured) throws Exception {
-        try (PeerConnection peer = PeerConnection.createPeer(CONFIG)) {
-            Track track = configured ? peer.addTrack(TrackInit.DEFAULT.withCodec(Track.Codec.RTC_CODEC_OPUS)
-                    .withDirection(Track.Direction.RTC_DIRECTION_SENDONLY)) : peer.addTrack(SDP);
-            int handle = handle(track);
-            try {
-                assertTrue(rtcGetTrackDirection(handle) >= 0);
-                peer.close();
-                assertThrows(InvalidException.class, () -> rtcGetTrackDirection(handle),
-                        "native track handle survived peer close");
-                assertDoesNotThrow(track::close, "a separately owned wrapper must remain safe to close");
-                assertDoesNotThrow(peer::close);
-            } finally {
-                rtcDeleteTrack(handle); // also clean up on the unfixed implementation
-            }
+    void peerCloseDeletesLocallyAddedConfiguredTrack() {
+        try (PeerConnection peer = PeerConnection.createPeer(CONFIG);
+             Track track = peer.addTrack(TrackInit.DEFAULT.withCodec(Track.Codec.RTC_CODEC_OPUS)
+                     .withDirection(Track.Direction.RTC_DIRECTION_SENDONLY))) {
+            assertEquals(Track.Direction.RTC_DIRECTION_SENDONLY, track.direction());
+            peer.close();
+            assertThrows(InvalidException.class, track::direction);
         }
     }
 
     @Test
     void peerCloseDeletesIncomingTrack() throws Exception {
-        try (PeerConnection peer = PeerConnection.createPeer(CONFIG)) {
-            int handle = rtcAddTrack(peer.peerHandle, SDP);
-            assertTrue(handle >= 0);
-            try {
-                peer.listener.onTrack(handle);
-                peer.close();
-                assertThrows(InvalidException.class, () -> rtcGetTrackDirection(handle));
-            } finally {
-                rtcDeleteTrack(handle);
+        var received = new CompletableFuture<Track>();
+        try (PeerConnection sender = PeerConnection.createPeer(CONFIG);
+             PeerConnection receiver = PeerConnection.createPeer(CONFIG)) {
+            receiver.onTrack.register((peer, track) -> received.complete(track));
+            sender.addTrack(SDP);
+            sender.setLocalDescription("offer");
+            receiver.setRemoteDescription(sender.localDescription(), SessionDescriptionType.OFFER);
+            try (Track track = received.get(5, TimeUnit.SECONDS)) {
+                assertEquals(Track.Direction.RTC_DIRECTION_RECVONLY, track.direction());
+                receiver.close();
+                assertThrows(InvalidException.class, track::direction);
             }
+        }
+    }
+
+    @Test
+    void closeWaitsForNativeTrackArrivalBeforeDeletingItsHandle() throws Exception {
+        var received = new CompletableFuture<Track>();
+        var releaseCallback = new CountDownLatch(1);
+        var closeStarted = new CountDownLatch(1);
+        var workers = Executors.newFixedThreadPool(2);
+        try (PeerConnection sender = PeerConnection.createPeer(CONFIG);
+             PeerConnection receiver = PeerConnection.createPeer(CONFIG)) {
+            sender.addTrack(SDP);
+            sender.setLocalDescription("offer");
+            receiver.setRemoteDescription(sender.localDescription(), SessionDescriptionType.OFFER);
+            // Registering flushes the native tracks that arrived while no callback was installed.
+            var registration = workers.submit(() -> receiver.onTrack.register((peer, track) -> {
+                received.complete(track);
+                try {
+                    releaseCallback.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            try (Track track = received.get(5, TimeUnit.SECONDS)) {
+                var close = workers.submit(() -> {
+                    closeStarted.countDown();
+                    receiver.close();
+                });
+                try {
+                    assertTrue(closeStarted.await(5, TimeUnit.SECONDS));
+                    assertThrows(java.util.concurrent.TimeoutException.class,
+                            () -> close.get(100, TimeUnit.MILLISECONDS));
+                    assertEquals(Track.Direction.RTC_DIRECTION_RECVONLY, track.direction(),
+                            "the arrival callback must finish before its native handle is deleted");
+                } finally {
+                    releaseCallback.countDown();
+                }
+                registration.get(5, TimeUnit.SECONDS);
+                close.get(5, TimeUnit.SECONDS);
+                assertThrows(InvalidException.class, track::direction);
+            }
+        } finally {
+            releaseCallback.countDown();
+            workers.shutdownNow();
+        }
+    }
+
+    @Test
+    void asynchronousPeerCloseAlsoDeletesTracks() {
+        try (PeerConnection peer = PeerConnection.createPeer(CONFIG);
+             Track track = peer.addTrack(SDP)) {
+            assertTrue(peer.closeAndAwait(Duration.ofSeconds(5)));
+            assertThrows(InvalidException.class, track::direction);
         }
     }
 
@@ -64,27 +117,5 @@ class TrackLifecycleTest {
             track.close();
             assertDoesNotThrow(track::close);
         }
-    }
-
-    @Test
-    void incomingTrackPublishedAfterPeerCloseIsDeletedInsteadOfDelivered() {
-        try (PeerConnection peer = PeerConnection.createPeer(CONFIG)) {
-            int handle = rtcAddTrack(peer.peerHandle, SDP);
-            assertTrue(handle >= 0);
-            try {
-                peer.close();
-                // Models an incoming track allocated before close but delivered after its snapshot.
-                peer.listener.onTrack(handle);
-                assertThrows(InvalidException.class, () -> rtcGetTrackDirection(handle));
-            } finally {
-                rtcDeleteTrack(handle);
-            }
-        }
-    }
-
-    private static int handle(Track track) throws Exception {
-        Field field = Track.class.getDeclaredField("trackHandle");
-        field.setAccessible(true);
-        return field.getInt(track);
     }
 }

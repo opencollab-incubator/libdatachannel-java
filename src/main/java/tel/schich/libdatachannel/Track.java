@@ -17,7 +17,6 @@ import java.util.Objects;
 public class Track implements Closeable {
     private final PeerConnection peer;
     private final int trackHandle;
-    private boolean closed;
 
     public Track(final PeerConnection peer, final int trackHandle) {
         this.peer = peer;
@@ -50,11 +49,9 @@ public class Track implements Closeable {
     }
 
     @Override
-    public synchronized void close() {
-        if (closed) return;
+    public void close() {
         int result = rtcDeleteTrack(trackHandle);
         if (result != ERR_INVALID) wrapError("rtcDeleteTrack", result);
-        closed = true;
         peer.dropTrackState(trackHandle);
     }
 

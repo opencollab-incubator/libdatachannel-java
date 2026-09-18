@@ -8,6 +8,7 @@ import static tel.schich.libdatachannel.LibDataChannelNative.rtcGetTrackDirectio
 import static tel.schich.libdatachannel.LibDataChannelNative.rtcGetTrackMid;
 import static tel.schich.libdatachannel.Util.mappedEnum;
 import static tel.schich.libdatachannel.Util.wrapError;
+import static tel.schich.libdatachannel.exception.LibDataChannelException.ERR_INVALID;
 
 import java.io.Closeable;
 import java.util.Map;
@@ -16,6 +17,7 @@ import java.util.Objects;
 public class Track implements Closeable {
     private final PeerConnection peer;
     private final int trackHandle;
+    private boolean closed;
 
     public Track(final PeerConnection peer, final int trackHandle) {
         this.peer = peer;
@@ -48,9 +50,12 @@ public class Track implements Closeable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        if (closed) return;
+        int result = rtcDeleteTrack(trackHandle);
+        if (result != ERR_INVALID) wrapError("rtcDeleteTrack", result);
+        closed = true;
         peer.dropTrackState(trackHandle);
-        wrapError("rtcDeleteTrack", rtcDeleteTrack(trackHandle));
     }
 
     @Override

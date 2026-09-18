@@ -75,13 +75,13 @@ class PeerConnectionListener {
     @JNIAccess
     void onDataChannel(int channelHandle) {
         final DataChannel channel = peer.newChannel(channelHandle);
-        peer.onDataChannel.invoke(h -> h.handleChannel(peer, channel));
+        if (!peer.isClosing()) peer.onDataChannel.invoke(h -> h.handleChannel(peer, channel));
     }
 
     @JNIAccess
     void onTrack(int trackHandle) {
         final Track state = peer.newTrack(trackHandle);
-        peer.onTrack.invoke(h -> h.handleTrack(peer, state));
+        if (!peer.isClosing()) peer.onTrack.invoke(h -> h.handleTrack(peer, state));
     }
 
     private <T> void invokeWithChannel(int handle, Function<DataChannel, EventListenerContainer<T>> listeners, BiConsumer<T, DataChannel> consumer) {
@@ -115,7 +115,10 @@ class PeerConnectionListener {
 
     @JNIAccess
     void onChannelBinaryMessage(int channelHandle, ByteBuffer message) {
-        invokeWithChannel(channelHandle, s -> s.onMessage, (h, ch) -> h.onBinary(ch, message));
+        // JNI lends this view only until this call returns. Custom executors may run later.
+        ByteBuffer delivered = peer.usesDirectCallbacks() ? message
+                : ByteBuffer.allocateDirect(message.remaining()).put(message.duplicate()).flip();
+        invokeWithChannel(channelHandle, s -> s.onMessage, (h, ch) -> h.onBinary(ch, delivered));
     }
 
     @JNIAccess

@@ -59,11 +59,14 @@ import java.util.concurrent.TimeoutException;
 
 public class PeerConnection implements Closeable {
     private static final Logger LOGGER = LoggerFactory.getLogger(PeerConnection.class);
+    static final Executor DIRECT_EXECUTOR = Runnable::run;
 
     final int peerHandle;
     private final Executor executor;
     private final ConcurrentMap<Integer, DataChannel> channels;
     private final ConcurrentMap<Integer, Track> tracks;
+    private final Object resourceLock = new Object();
+    private volatile boolean closing;
     private final Cleaner.Cleanable cleanable;
     private volatile boolean nativeTeardownComplete;
     private @Nullable CompletableFuture<Void> closeCompletion;
@@ -203,7 +206,15 @@ public class PeerConnection implements Closeable {
     public static long nativeCreationAttempts() { return LibDataChannelNative.rtcGetPeerConnectionCreationAttempts(); }
 
     public static PeerConnection createPeer(PeerConnectionConfiguration config) {
-        return createPeer(config, Runnable::run);
+        return createPeer(config, DIRECT_EXECUTOR);
+    }
+
+    boolean usesDirectCallbacks() {
+        return executor == DIRECT_EXECUTOR;
+    }
+
+    boolean isClosing() {
+        return closing;
     }
 
     @Nullable
@@ -212,7 +223,13 @@ public class PeerConnection implements Closeable {
     }
 
     DataChannel newChannel(int channelHandle) {
-        return channels.computeIfAbsent(channelHandle, h -> new DataChannel(this, h, executor));
+        DataChannel channel;
+        synchronized (resourceLock) {
+            channel = channels.computeIfAbsent(channelHandle, h -> new DataChannel(this, h, executor));
+        }
+        // A native callback or a creator can publish a handle after close took its snapshot.
+        if (closing) channel.close();
+        return channel;
     }
 
     void dropChannelState(int channelHandle) {
@@ -220,7 +237,12 @@ public class PeerConnection implements Closeable {
     }
 
     Track newTrack(int trackHandle) {
-        return tracks.computeIfAbsent(trackHandle, h -> new Track(this, h));
+        Track track;
+        synchronized (resourceLock) {
+            track = tracks.computeIfAbsent(trackHandle, h -> new Track(this, h));
+        }
+        if (closing) track.close();
+        return track;
     }
 
     public void dropTrackState(int trackHandle) {
@@ -234,10 +256,20 @@ public class PeerConnection implements Closeable {
      */
     @Override
     public void close() {
+        synchronized (resourceLock) {
+            closing = true;
+        }
         try {
             closeChannels();
         } catch (Exception e) {
             LOGGER.warn("Failed to close channels of peer connection", e);
+        }
+        for (Track track : new ArrayList<>(tracks.values())) {
+            try {
+                track.close();
+            } catch (Exception e) {
+                LOGGER.warn("Failed to close track of peer connection", e);
+            }
         }
         // Detach callbacks before the cleaner deletes their native peer handle.
         onLocalDescription.close();
@@ -521,21 +553,19 @@ public class PeerConnection implements Closeable {
         int stream = init.stream().orElse(0);
         boolean manualStream = init.stream().isPresent();
         final int channelHandle = wrapError("rtcCreateDataChannelEx", rtcCreateDataChannelEx(peerHandle, label, reliability.isUnordered(), reliability.isUnreliable(), reliability.maxPacketLifeTime().toMillis(), reliability.maxRetransmits(), init.protocol().orElse(null), init.isNegotiated(), stream, manualStream));
-        final DataChannel channel = new DataChannel(this, channelHandle, executor);
-        this.channels.put(channelHandle, channel);
-        return channel;
+        return newChannel(channelHandle);
     }
 
     // Adds a new Track on a Peer Connection. The Peer Connection does not need to be connected, however, the Track will be open only when the Peer Connection is connected.
     // sdp: a null-terminated string specifying the corresponding media SDP. It must start with a m-line and include a mid parameter.
     public Track addTrack(String sdp) {
         final int trackHandle = wrapError("rtcAddTrack", rtcAddTrack(peerHandle, sdp));
-        return new Track(this, trackHandle);
+        return newTrack(trackHandle);
     }
 
     public Track addTrack(TrackInit init) {
         final int trackHandle = wrapError("rtcAddTrackEx", rtcAddTrackEx(peerHandle, init.direction().direction, init.codec().codec));
-        return new Track(this, trackHandle);
+        return newTrack(trackHandle);
     }
 
     @Override

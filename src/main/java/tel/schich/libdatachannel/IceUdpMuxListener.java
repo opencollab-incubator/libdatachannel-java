@@ -97,7 +97,7 @@ public final class IceUdpMuxListener implements AutoCloseable {
             this.remoteDescription = this.localPassword = "";
             this.certificate = this.key = null;
             this.keyPassword = null;
-            this.peerExecutor = Runnable::run;
+            this.peerExecutor = PeerConnection.DIRECT_EXECUTOR;
             this.initializer = ignored -> {};
             this.expiresAt = Objects.requireNonNull(expiresAt, "expiresAt");
             this.existingPeer = Objects.requireNonNull(peer, "peer");
@@ -115,7 +115,7 @@ public final class IceUdpMuxListener implements AutoCloseable {
             private final String remoteDescription, localPassword;
             private PeerConnectionConfiguration configuration = PeerConnectionConfiguration.DEFAULT;
             private @Nullable DtlsIdentity identity;
-            private Executor peerExecutor = Runnable::run;
+            private Executor peerExecutor = PeerConnection.DIRECT_EXECUTOR;
             private Consumer<PeerConnection> initializer = ignored -> {};
             private Instant expiresAt = Instant.MAX;
 

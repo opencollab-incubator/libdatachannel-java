@@ -30,8 +30,8 @@ These replace the ambiguous `linux-x86_64` and `linux-aarch64` classifiers;
 update explicit classifier dependencies when upgrading. Other platforms keep
 `windows-x86_64`, `windows-aarch64`, `macos-x86_64`, and `macos-arm64`.
 
-Linux requires OpenSSL 3 and the target distribution's C++ runtime (on Alpine,
-`apk add libssl3 libstdc++`). Installing `gcompat` is unnecessary. The bundle
+Linux requires OpenSSL 3 (on Alpine, `apk add libssl3`); the C++ runtime is
+linked in. Installing `gcompat` is unnecessary. The bundle
 selects libc from `/proc/self/maps`; if procfs is unavailable, explicitly set
 `-Dlibdatachannel.libc=glibc` or `-Dlibdatachannel.libc=musl` to match the JVM.
 

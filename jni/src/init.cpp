@@ -52,7 +52,7 @@ void logger_callback(const rtcLogLevel level, const char* message) {
     }
 }
 
-#if defined(__linux__) && !defined(__GLIBC__)
+#if defined(__linux__) && !defined(__GLIBC__) && !defined(__ANDROID__)
 // musl gives new threads a fixed 128 KiB stack. The JVM reserves most of that for its own guard and
 // shadow pages when a native thread attaches, so callbacks from the library's worker threads overflow
 // before reaching Java. glibc sizes thread stacks from RLIMIT_STACK instead.
@@ -73,7 +73,7 @@ static void ensure_thread_stack_size() {
 #endif
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* jvm, void* reserved) {
-#if defined(__linux__) && !defined(__GLIBC__)
+#if defined(__linux__) && !defined(__GLIBC__) && !defined(__ANDROID__)
     ensure_thread_stack_size();
 #endif
     pthread_key_create(&thread_key, detach_thread);

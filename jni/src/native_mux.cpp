@@ -207,12 +207,19 @@ extern "C" JNIEXPORT jint JNICALL Java_tel_schich_libdatachannel_IceUdpMuxListen
     std::vector<std::string> prefixCopies(count);
     std::vector<std::vector<char>> secretCopies(count);
     std::vector<rtcIceUdpMuxAdmissionKey> keys(count);
+    // Failures break rather than return, so the secrets copied so far are still wiped
+    int result = RTC_ERR_SUCCESS;
     for (jsize i = 0; i < count; ++i) {
         auto prefix = static_cast<jstring>(env->GetObjectArrayElement(prefixes, i));
         auto secret = static_cast<jbyteArray>(env->GetObjectArrayElement(secrets, i));
+        if (prefix == nullptr || secret == nullptr) {
+            result = RTC_ERR_INVALID;
+            break;
+        }
         const char* chars = env->GetStringUTFChars(prefix, nullptr);
         if (chars == nullptr) {
-            return RTC_ERR_FAILURE;
+            result = RTC_ERR_FAILURE;
+            break;
         }
         prefixCopies[i] = chars;
         env->ReleaseStringUTFChars(prefix, chars);
@@ -223,12 +230,14 @@ extern "C" JNIEXPORT jint JNICALL Java_tel_schich_libdatachannel_IceUdpMuxListen
         env->DeleteLocalRef(secret);
         keys[i] = {prefixCopies[i].c_str(), secretCopies[i].data(), static_cast<int>(secretCopies[i].size())};
     }
-    std::vector<char> contextCopy(env->GetArrayLength(context));
-    env->GetByteArrayRegion(context, 0, static_cast<jsize>(contextCopy.size()),
-                            reinterpret_cast<jbyte*>(contextCopy.data()));
-    const rtcIceUdpMuxAdmission admission{contextCopy.data(), static_cast<int>(contextCopy.size()),
-                                          keys.data(), static_cast<int>(count)};
-    const int result = rtcSetIceUdpMuxAdmission(listener, &admission);
+    if (result == RTC_ERR_SUCCESS) {
+        std::vector<char> contextCopy(env->GetArrayLength(context));
+        env->GetByteArrayRegion(context, 0, static_cast<jsize>(contextCopy.size()),
+                                reinterpret_cast<jbyte*>(contextCopy.data()));
+        const rtcIceUdpMuxAdmission admission{contextCopy.data(), static_cast<int>(contextCopy.size()),
+                                              keys.data(), static_cast<int>(count)};
+        result = rtcSetIceUdpMuxAdmission(listener, &admission);
+    }
     for (auto& secret : secretCopies) {
         volatile char* bytes = secret.data(); // Volatile, so the wipe survives optimization.
         for (size_t i = 0; i < secret.size(); ++i) bytes[i] = 0;

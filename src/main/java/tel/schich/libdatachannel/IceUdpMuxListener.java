@@ -9,7 +9,9 @@ import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -397,10 +399,12 @@ public final class IceUdpMuxListener implements AutoCloseable {
     public synchronized void setAdmission(byte[] context, Map<String, byte[]> secretsByUfragPrefix) {
         if (handle == 0) throw new IllegalStateException("ICE listener closed");
         Objects.requireNonNull(context, "context");
-        String[] prefixes = new String[secretsByUfragPrefix.size()];
+        // Snapshot first, as a concurrent map can change size between size() and iteration
+        List<Map.Entry<String, byte[]>> keys = new ArrayList<>(secretsByUfragPrefix.entrySet());
+        String[] prefixes = new String[keys.size()];
         byte[][] secrets = new byte[prefixes.length][];
         int i = 0;
-        for (Map.Entry<String, byte[]> key : secretsByUfragPrefix.entrySet()) {
+        for (Map.Entry<String, byte[]> key : keys) {
             prefixes[i] = Objects.requireNonNull(key.getKey(), "prefix");
             secrets[i++] = Objects.requireNonNull(key.getValue(), "secret");
         }

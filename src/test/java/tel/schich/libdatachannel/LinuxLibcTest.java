@@ -28,15 +28,31 @@ class LinuxLibcTest {
     }
 
     @Test
+    void identifiesMuslLinkedAsAPlainLibcSo() {
+        assertEquals("musl", LinuxLibc.fromMappings(List.of("0000 r-xp /usr/lib/x86_64-linux-musl/libc.so")));
+        assertEquals("musl", LinuxLibc.fromMappings(List.of("0000 r-xp /usr/lib/libc.so")));
+        assertEquals("musl", LinuxLibc.fromMappings(List.of(
+                "0000 r-xp /usr/lib/libc.so.6", "0000 r-xp /usr/lib/libc.so")));
+    }
+
+    @Test
+    void bionicIsNotTakenForMusl() {
+        assertThrows(UnsatisfiedLinkError.class, () -> LinuxLibc.fromMappings(
+                List.of("0000 r-xp /apex/com.android.runtime/lib64/bionic/libc.so")));
+        assertThrows(UnsatisfiedLinkError.class,
+                () -> LinuxLibc.fromMappings(List.of("0000 r-xp /system/lib64/libc.so")));
+    }
+
+    @Test
     void unknownMappingsRequireAnExplicitOverride() {
-        assertThrows(IllegalStateException.class,
+        assertThrows(UnsatisfiedLinkError.class,
                 () -> LinuxLibc.fromMappings(List.of("0000 r-xp /home/musl/libjvm.so")));
         System.setProperty(LinuxLibc.PROPERTY, "musl");
         assertEquals("musl", LinuxLibc.detect());
         System.setProperty(LinuxLibc.PROPERTY, "glibc");
         assertEquals("glibc", LinuxLibc.detect());
         System.setProperty(LinuxLibc.PROPERTY, "unknown");
-        assertThrows(IllegalArgumentException.class, LinuxLibc::detect);
+        assertThrows(UnsatisfiedLinkError.class, LinuxLibc::detect);
     }
 
     @Test

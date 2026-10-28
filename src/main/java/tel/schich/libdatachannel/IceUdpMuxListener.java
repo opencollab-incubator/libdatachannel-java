@@ -417,10 +417,11 @@ public final class IceUdpMuxListener implements AutoCloseable {
      * Reads a PROXY protocol v2 header from these relays, as numeric addresses or CIDR ranges, on a
      * shared ICE UDP port, for listeners and peers alike, and attributes their datagrams to the client
      * the header declares. Replies go back through the relay, so a relay must use one source port per
-     * client. Other datagrams are dropped except STUN responses to the port's own requests. The port
-     * stays open while set. A new list keeps the clients of relays it still lists, and an empty one
-     * clears it. The bind address must match the peers' or listener's, where a wildcard and null are
-     * the same port.
+     * client, and nothing else leaves the port straight but STUN server lookups. Other incoming
+     * datagrams are dropped except STUN responses to the port's own requests. The port stays open
+     * while set. A new list keeps the clients of relays it still lists, and an empty one clears it.
+     * The bind address must match the peers' or listener's, where a wildcard and null are the same
+     * port.
      */
     public static void setProxyProtocol(@Nullable InetAddress bindAddress, int port, Collection<String> proxies) {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("Explicit UDP port required");

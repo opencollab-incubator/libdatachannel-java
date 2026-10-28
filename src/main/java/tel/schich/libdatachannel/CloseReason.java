@@ -14,11 +14,11 @@ public enum CloseReason {
     RTC_CLOSE_REASON_REMOTE_SHUTDOWN(2),
     /** The remote aborted the SCTP association. */
     RTC_CLOSE_REASON_REMOTE_ABORT(3),
-    /** The remote stopped acknowledging SCTP data. */
+    /** The remote stopped answering SCTP, handshake included. */
     RTC_CLOSE_REASON_SCTP_TIMEOUT(4),
     /** ICE lost connectivity to the remote. */
     RTC_CLOSE_REASON_ICE_FAILED(5),
-    /** DTLS or SCTP failed otherwise. */
+    /** A transport failed otherwise, or could not start. */
     RTC_CLOSE_REASON_TRANSPORT_FAILED(6),
     ;
 

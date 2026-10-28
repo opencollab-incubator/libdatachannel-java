@@ -80,8 +80,10 @@ public final class NativeTransportProbe {
     static void proxyProtocol() throws Exception {
         InetAddress any = InetAddress.getByName("0.0.0.0");
         BlockingQueue<IceUdpMuxListener.Request> requests = new LinkedBlockingQueue<>();
+        // Held while the relay is looked up: a refused request takes its relay with it
+        CompletableFuture<IceUdpMuxListener.Acceptance> decision = new CompletableFuture<>();
         try (IceUdpMuxListener mux = new IceUdpMuxListener(any, PORT, Runnable::run, request -> {
-                requests.add(request); return CompletableFuture.completedFuture(null);
+                requests.add(request); return decision;
              });
              DatagramSocket relay = new DatagramSocket(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0))) {
             IceUdpMuxListener.setProxyProtocol(any, PORT, List.of("127.0.0.1"));
@@ -97,6 +99,7 @@ public final class NativeTransportProbe {
                 check(IceUdpMuxListener.proxyRelay(any, PORT, new InetSocketAddress("203.0.113.7", 40124)) == null,
                     "a client no relay declared has none");
             } finally {
+                decision.complete(null);
                 IceUdpMuxListener.setProxyProtocol(any, PORT, List.of());
             }
         }

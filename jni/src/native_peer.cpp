@@ -369,7 +369,8 @@ JNIEXPORT jobject JNICALL Java_tel_schich_libdatachannel_LibDataChannelNative_rt
     return call_tel_schich_libdatachannel_SctpStats_create(env, stats.rtt, stats.rto,
         static_cast<jlong>(stats.congestionWindow), static_cast<jlong>(stats.peerReceiveWindow),
         static_cast<jlong>(stats.unackedChunks), static_cast<jlong>(stats.pendingChunks),
-        static_cast<jlong>(stats.dataTimeouts));
+        static_cast<jlong>(stats.dataTimeouts), static_cast<jlong>(stats.sendQueueBytes),
+        static_cast<jlong>(stats.sendBufferSize), static_cast<jlong>(stats.receiveQueueBytes));
 }
 
 JNIEXPORT jint JNICALL Java_tel_schich_libdatachannel_LibDataChannelNative_rtcSetLocalDescriptionWithIce(

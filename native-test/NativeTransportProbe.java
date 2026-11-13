@@ -43,11 +43,13 @@ public final class NativeTransportProbe {
             "\r\na=sctp-port:5000\r\na=max-message-size:262144\r\na=candidate:1 1 UDP 2130706431 127.0.0.1 " + PORT +
             " typ host\r\na=end-of-candidates\r\n";
     }
+    /** Above the 256 KiB max message size, which would otherwise raise it, and not the 1 MiB default. */
+    static final int SEND_BUFFER_SIZE = 512 << 10;
     public static void main(String[] args) throws Exception {
         // Set before the first peer, the associations below have to run on it
         LibDataChannel.setSctpSettings(SctpSettings.builder().minRetransmitTimeoutMs(400)
             .initialRetransmitTimeoutMs(500).maxRetransmitTimeoutMs(3000).delayedSackTimeMs(200)
-            .maxRetransmitAttempts(5).build());
+            .maxRetransmitAttempts(5).sendBufferSize(SEND_BUFFER_SIZE).build());
         Path certificate = Path.of(args[0]), key = Path.of(args[1]);
         byte[] der;
         try (var input = Files.newInputStream(certificate)) {
@@ -455,6 +457,7 @@ public final class NativeTransportProbe {
         ArrayBlockingQueue<IceUdpMuxListener.Request> arrivals = new ArrayBlockingQueue<>(4);
         AtomicInteger notifications = new AtomicInteger(), channelMask = new AtomicInteger(), callbackGuards = new AtomicInteger();
         AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<DataChannel> hostOrdered = new AtomicReference<>();
         CountDownLatch opened = new CountDownLatch(2), messages = new CountDownLatch(402), failed = new CountDownLatch(1);
         PeerConnection host = null;
         try (IceUdpMuxListener mux = new IceUdpMuxListener(LOOPBACK, PORT, Runnable::run, request -> {
@@ -499,6 +502,7 @@ public final class NativeTransportProbe {
                 peer.onDataChannel.register((p, dc) -> {
                     int bit = dc.label().equals("ordered") ? 1 : dc.label().equals("unordered") ? 2 : 0;
                     channelMask.getAndUpdate(mask -> mask | bit);
+                    if (bit == 1) hostOrdered.set(dc);
                     dc.onMessage.register(DataChannelCallback.Message.handleBinary((d, data) -> {
                         try { check(bit != 0 && data.remaining() == 2 && data.get() == 0 && data.get() == bit, "distinct channel payload"); messages.countDown(); }
                         catch (Throwable error) { failure.set(error); }
@@ -523,6 +527,16 @@ public final class NativeTransportProbe {
                 check(sctp.congestionWindow() > 0 && sctp.peerReceiveWindow() > 0 && !sctp.rto().isZero() &&
                     sctp.dataTimeouts() == 0, "SCTP stats describe a healthy loopback association");
                 check(sctp.rto().toMillis() >= 400, "SCTP settings raise the minimum RTO, got " + sctp.rto());
+                check(sctp.sendBufferSize() == SEND_BUFFER_SIZE, "SCTP settings size the send buffer, got " + sctp.sendBufferSize());
+                PeerConnection sender = host;
+                long mostQueued = 0;
+                // Delayed SACKs keep at least the first message queued
+                for (int i = 0; i < 32; i++) {
+                    hostOrdered.get().sendMessage(ByteBuffer.allocateDirect(16 << 10));
+                    mostQueued = Math.max(mostQueued, sender.sctpStats().map(SctpStats::sendQueueBytes).orElse(0L));
+                }
+                check(mostQueued >= 16 << 10, "SCTP send queue holds an unacknowledged message, got " + mostQueued);
+                await(() -> sender.sctpStats().map(SctpStats::sendQueueBytes).orElse(-1L) == 0, "SCTP send queue drains once acknowledged");
                 long[] stats = mux.stats();
                 check(notifications.get() == 1 && stats[5] == 1 && stats[2] == 1 && stats[3] == 1 && stats[0] > 10,
                     "transport traffic stays native after one admission callback");
@@ -535,7 +549,7 @@ public final class NativeTransportProbe {
                 check(remote == CloseReason.RTC_CLOSE_REASON_REMOTE_SHUTDOWN || remote == CloseReason.RTC_CLOSE_REASON_REMOTE_ABORT,
                     "a client close reads as remote on the host, got " + remote);
                 System.out.println("native-transport PASS ufragChars=" + ufragLength + " admissionCallbacks=1 duplicates=" + stats[6] +
-                    " datagrams=" + stats[0] + " channels=2 messages=402 " + sctp + " hostCloseReason=" + remote);
+                    " datagrams=" + stats[0] + " channels=2 messages=402 " + sctp + " mostQueued=" + mostQueued + " hostCloseReason=" + remote);
             }
         } finally { if (host != null) check(host.closeAndAwait(Duration.ofSeconds(5)), "accepted peer native cleanup"); }
     }

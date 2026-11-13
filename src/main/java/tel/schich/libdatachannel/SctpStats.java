@@ -7,10 +7,12 @@ import java.time.Duration;
 /** What a peer's SCTP association reported about itself when it was read. */
 public final class SctpStats {
     private final Duration rtt, rto;
-    private final long congestionWindow, peerReceiveWindow, unackedChunks, pendingChunks, dataTimeouts;
+    private final long congestionWindow, peerReceiveWindow, unackedChunks, pendingChunks, dataTimeouts,
+        sendQueueBytes, sendBufferSize, receiveQueueBytes;
 
     private SctpStats(Duration rtt, Duration rto, long congestionWindow, long peerReceiveWindow,
-                      long unackedChunks, long pendingChunks, long dataTimeouts) {
+                      long unackedChunks, long pendingChunks, long dataTimeouts, long sendQueueBytes,
+                      long sendBufferSize, long receiveQueueBytes) {
         this.rtt = rtt;
         this.rto = rto;
         this.congestionWindow = congestionWindow;
@@ -18,13 +20,18 @@ public final class SctpStats {
         this.unackedChunks = unackedChunks;
         this.pendingChunks = pendingChunks;
         this.dataTimeouts = dataTimeouts;
+        this.sendQueueBytes = sendQueueBytes;
+        this.sendBufferSize = sendBufferSize;
+        this.receiveQueueBytes = receiveQueueBytes;
     }
 
     @JNIAccess
     static SctpStats create(int rttMillis, int rtoMillis, long congestionWindow, long peerReceiveWindow,
-                            long unackedChunks, long pendingChunks, long dataTimeouts) {
+                            long unackedChunks, long pendingChunks, long dataTimeouts, long sendQueueBytes,
+                            long sendBufferSize, long receiveQueueBytes) {
         return new SctpStats(Duration.ofMillis(rttMillis), Duration.ofMillis(rtoMillis), congestionWindow,
-            peerReceiveWindow, unackedChunks, pendingChunks, dataTimeouts);
+            peerReceiveWindow, unackedChunks, pendingChunks, dataTimeouts, sendQueueBytes, sendBufferSize,
+            receiveQueueBytes);
     }
 
     /** Smoothed round trip time in whole milliseconds, zero until sampled or while under one. */
@@ -41,11 +48,18 @@ public final class SctpStats {
     public long pendingChunks() { return pendingChunks; }
     /** Retransmission timer expiries since the association started, each a stall while data is resent. */
     public long dataTimeouts() { return dataTimeouts; }
+    /** Bytes accepted for sending and not acknowledged yet, sent or not, which the buffered amount does not count. */
+    public long sendQueueBytes() { return sendQueueBytes; }
+    /** Bytes the send queue may hold before messages wait in the buffered amount instead. */
+    public long sendBufferSize() { return sendBufferSize; }
+    /** Received bytes waiting for reassembly or ordering. */
+    public long receiveQueueBytes() { return receiveQueueBytes; }
 
     @Override
     public String toString() {
         return "SctpStats{rtt=" + rtt.toMillis() + "ms, rto=" + rto.toMillis() + "ms, congestionWindow=" +
             congestionWindow + ", peerReceiveWindow=" + peerReceiveWindow + ", unackedChunks=" + unackedChunks +
-            ", pendingChunks=" + pendingChunks + ", dataTimeouts=" + dataTimeouts + "}";
+            ", pendingChunks=" + pendingChunks + ", dataTimeouts=" + dataTimeouts + ", sendQueueBytes=" +
+            sendQueueBytes + ", sendBufferSize=" + sendBufferSize + ", receiveQueueBytes=" + receiveQueueBytes + "}";
     }
 }

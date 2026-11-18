@@ -55,7 +55,8 @@ public abstract class LibDataChannel {
     private static void applySctpSettings(SctpSettings s) {
         setSctpSettingsNative(s.recvBufferSize, s.sendBufferSize, s.maxChunksOnQueue, s.initialCongestionWindow,
             s.maxBurst, s.congestionControlModule, s.delayedSackTimeMs, s.minRetransmitTimeoutMs,
-            s.maxRetransmitTimeoutMs, s.initialRetransmitTimeoutMs, s.maxRetransmitAttempts, s.heartbeatIntervalMs);
+            s.maxRetransmitTimeoutMs, s.initialRetransmitTimeoutMs, s.maxRetransmitAttempts, s.heartbeatIntervalMs,
+            s.cwndBasedMaxBurst);
     }
 
     private static native void setSctpSettingsNative(int recvBufferSize, int sendBufferSize, int maxChunksOnQueue,
@@ -63,7 +64,7 @@ public abstract class LibDataChannel {
                                                      int congestionControlModule, int delayedSackTimeMs,
                                                      int minRetransmitTimeoutMs, int maxRetransmitTimeoutMs,
                                                      int initialRetransmitTimeoutMs, int maxRetransmitAttempts,
-                                                     int heartbeatIntervalMs);
+                                                     int heartbeatIntervalMs, int cwndBasedMaxBurst);
 
     /**
      * Initializes the library by loading the native library.

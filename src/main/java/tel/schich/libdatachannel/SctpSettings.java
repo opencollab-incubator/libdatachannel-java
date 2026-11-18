@@ -4,7 +4,8 @@ package tel.schich.libdatachannel;
  * Process-wide SCTP tuning, applied with {@link LibDataChannel#setSctpSettings(SctpSettings)}.
  * <p>
  * Fields left at 0 keep libdatachannel's default. A negative {@code maxBurst} or {@code delayedSackTimeMs}
- * disables that mechanism, and {@code congestionControlModule} keeps the default at -1.
+ * disables that mechanism, and {@code congestionControlModule} keeps the default at -1. {@code cwndBasedMaxBurst}
+ * keeps usrsctp's default (on) at 0.
  *
  * @see <a href="https://github.com/paullouisageneau/libdatachannel/blob/master/DOC.md#rtcsetsctpsettings">Documentation</a>
  */
@@ -13,7 +14,7 @@ public final class SctpSettings {
 
   final int recvBufferSize, sendBufferSize, maxChunksOnQueue, initialCongestionWindow, maxBurst,
       congestionControlModule, delayedSackTimeMs, minRetransmitTimeoutMs, maxRetransmitTimeoutMs,
-      initialRetransmitTimeoutMs, maxRetransmitAttempts, heartbeatIntervalMs;
+      initialRetransmitTimeoutMs, maxRetransmitAttempts, heartbeatIntervalMs, cwndBasedMaxBurst;
 
   private SctpSettings(Builder b) {
     this.recvBufferSize = b.recvBufferSize;
@@ -28,6 +29,7 @@ public final class SctpSettings {
     this.initialRetransmitTimeoutMs = b.initialRetransmitTimeoutMs;
     this.maxRetransmitAttempts = b.maxRetransmitAttempts;
     this.heartbeatIntervalMs = b.heartbeatIntervalMs;
+    this.cwndBasedMaxBurst = b.cwndBasedMaxBurst;
   }
 
   public static Builder builder() {
@@ -42,13 +44,13 @@ public final class SctpSettings {
         ", delayedSackTimeMs=" + delayedSackTimeMs + ", minRetransmitTimeoutMs=" + minRetransmitTimeoutMs +
         ", maxRetransmitTimeoutMs=" + maxRetransmitTimeoutMs + ", initialRetransmitTimeoutMs=" +
         initialRetransmitTimeoutMs + ", maxRetransmitAttempts=" + maxRetransmitAttempts +
-        ", heartbeatIntervalMs=" + heartbeatIntervalMs + "}";
+        ", heartbeatIntervalMs=" + heartbeatIntervalMs + ", cwndBasedMaxBurst=" + cwndBasedMaxBurst + "}";
   }
 
   public static final class Builder {
     private int recvBufferSize, sendBufferSize, maxChunksOnQueue, initialCongestionWindow, maxBurst,
         delayedSackTimeMs, minRetransmitTimeoutMs, maxRetransmitTimeoutMs, initialRetransmitTimeoutMs,
-        maxRetransmitAttempts, heartbeatIntervalMs;
+        maxRetransmitAttempts, heartbeatIntervalMs, cwndBasedMaxBurst;
     private int congestionControlModule = -1;
 
     private Builder() {
@@ -132,6 +134,16 @@ public final class SctpSettings {
 
     public Builder heartbeatIntervalMs(int millis) {
       this.heartbeatIntervalMs = millis;
+      return this;
+    }
+
+    /**
+     * Whether max burst shrinks the congestion window to what is in flight plus {@link #maxBurst} MTUs whenever the
+     * sender has less in flight than the window allows, as usrsctp does by default. Light traffic then pins the
+     * window at max burst MTUs going into every burst after it; with false, max burst only limits each burst.
+     */
+    public Builder cwndBasedMaxBurst(boolean enabled) {
+      this.cwndBasedMaxBurst = enabled ? 1 : -1;
       return this;
     }
 

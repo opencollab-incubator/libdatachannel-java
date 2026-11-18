@@ -66,7 +66,8 @@ JNIEXPORT void JNICALL Java_tel_schich_libdatachannel_LibDataChannel_setSctpSett
         JNIEnv* env, jclass clazz, const jint recvBufferSize, const jint sendBufferSize, const jint maxChunksOnQueue,
         const jint initialCongestionWindow, const jint maxBurst, const jint congestionControlModule,
         const jint delayedSackTimeMs, const jint minRetransmitTimeoutMs, const jint maxRetransmitTimeoutMs,
-        const jint initialRetransmitTimeoutMs, const jint maxRetransmitAttempts, const jint heartbeatIntervalMs) {
+        const jint initialRetransmitTimeoutMs, const jint maxRetransmitAttempts, const jint heartbeatIntervalMs,
+        const jint cwndBasedMaxBurst) {
     rtcSctpSettings settings{};
     settings.recvBufferSize = recvBufferSize;
     settings.sendBufferSize = sendBufferSize;
@@ -80,5 +81,6 @@ JNIEXPORT void JNICALL Java_tel_schich_libdatachannel_LibDataChannel_setSctpSett
     settings.initialRetransmitTimeoutMs = initialRetransmitTimeoutMs;
     settings.maxRetransmitAttempts = maxRetransmitAttempts;
     settings.heartbeatIntervalMs = heartbeatIntervalMs;
+    settings.cwndBasedMaxBurst = cwndBasedMaxBurst;
     wrap_error(env, "rtcSetSctpSettings", rtcSetSctpSettings(&settings));
 }

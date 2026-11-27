@@ -370,7 +370,9 @@ JNIEXPORT jobject JNICALL Java_tel_schich_libdatachannel_LibDataChannelNative_rt
         static_cast<jlong>(stats.congestionWindow), static_cast<jlong>(stats.peerReceiveWindow),
         static_cast<jlong>(stats.unackedChunks), static_cast<jlong>(stats.pendingChunks),
         static_cast<jlong>(stats.dataTimeouts), static_cast<jlong>(stats.sendQueueBytes),
-        static_cast<jlong>(stats.sendBufferSize), static_cast<jlong>(stats.receiveQueueBytes));
+        static_cast<jlong>(stats.sendBufferSize), static_cast<jlong>(stats.receiveQueueBytes),
+        static_cast<jlong>(stats.fastRetransmits), static_cast<jlong>(stats.retransmittedChunks),
+        static_cast<jlong>(stats.gapSacks), static_cast<jlong>(stats.duplicateTsnsReceived));
 }
 
 JNIEXPORT jint JNICALL Java_tel_schich_libdatachannel_LibDataChannelNative_rtcSetLocalDescriptionWithIce(
